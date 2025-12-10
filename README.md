@@ -43,7 +43,8 @@ git clone https://github.com/tcellsx/API_Fin.git
 cd API_Fin/humming2music
 
 # Install dependencies
-pip install numpy librosa pydub sounddevice basic-pitch
+pip install numpy librosa pydub sounddevice soundfile basic-pitch pretty_midi
+pip install torch transformers  # For MusicGen
 ```
 
 **Note:** For MP3 export functionality, you also need [FFmpeg](https://ffmpeg.org/) installed on your system.
@@ -73,23 +74,22 @@ audio_meta = manager.ingest_upload("path/to/your/humming.wav")
 preprocessor = Preprocessor()
 prep_meta = preprocessor.preprocess(audio_meta.path)
 
-# 3. Extract melody
+# 3. Extract melody (outputs MIDI file via Basic Pitch)
 extractor = MelodyExtractor()
 contour = extractor.extract(prep_meta.path)
 
-# 4. Convert to notes
+# 4. Convert MIDI to note representation
 representer = MelodyRepresenter()
-melody_rep = representer.represent(
-    time=contour.time,
-    f0_midi=contour.f0_midi,
-    voiced=contour.voiced
-)
+melody_rep = representer.represent(midi_path=contour.midi_path)
 
 # 5. Generate music
-generator = MusicGenerator()
+generator = MusicGenerator(model_size='melody', device='cpu')
 result = generator.generate(
     melody_representation=melody_rep.to_dict(),
-    style_name="lofi"  # Options: lofi, orchestral, 8bit, rock, ambient
+    melody_audio_path=prep_meta.path,
+    style_name="lofi",  # Options: lofi, orchestral, 8bit, rock, ambient
+    prompt_text="A relaxed lofi hip-hop track with warm textures",
+    duration_sec=10
 )
 
 # 6. Post-process
@@ -115,19 +115,23 @@ print(f"Output saved to: {final.final_audio_path}")
 
 ## Technical Details
 
-### Pitch Extraction
-The system uses Basic Pitch, a neural network-based pitch detection model developed by Spotify, for robust F0 estimation even in noisy conditions.
+### Melody Extraction
+The system uses Basic Pitch, a neural network-based pitch detection model developed by Spotify, which outputs MIDI files directly. This provides robust polyphonic pitch estimation even in noisy conditions.
+
+### Music Generation
+Music generation is powered by Meta's MusicGen model (via Hugging Face Transformers). The extracted MIDI is synthesized to audio and used as melody conditioning for the generation process.
 
 ### Similarity Evaluation
-- **Pitch Similarity**: Dynamic Time Warping (DTW) on MIDI pitch sequences
-- **Rhythm Similarity**: Levenshtein edit distance on quantized note patterns
-- **Overall Score**: Weighted combination (70% pitch, 30% rhythm)
+- **Pitch Similarity**: Dynamic Time Warping (DTW) on chroma features extracted from audio
+- **Rhythm Similarity**: Computed alongside pitch via DTW alignment
+- **Overall Score**: Combined similarity metric
 
 ## Future Work
 
-- Integration of neural music generation models (MusicGen, Riffusion)
+- Integration of additional neural music generation models (Riffusion, MusicLM)
 - Comparison with alternative pitch tracking models (CREPE)
 - Perceptual evaluation through user studies
+- GPU acceleration for faster generation
 
 
 ## License
